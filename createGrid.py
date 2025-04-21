@@ -29,7 +29,9 @@ def interpolate_points(x, y, z, grid_x, grid_y):
     interpolated_z = griddata(points, z, grid_points, method='nearest')
     return interpolated_z.reshape(grid_x.shape)
 
-
+# Calculate rms for specified square size
+# dtm_array: 2d array of the dtm (extracted from the other functions)
+# window_size: square size for the window
 def calculate_rms(dtm_array, window_size):
     rows, cols = dtm_array.shape
     rms_map = np.full_like(dtm_array, np.nan, dtype=np.float32)
@@ -75,7 +77,7 @@ with rasterio.open("dtm.tif") as src:
     dtm = src.read(1)
     transform = src.transform
 
-rms_map = calculate_rms(dtm, window_size=20)
+rms_map = calculate_rms(dtm, window_size=35)
 
 save_raster("rms_height_map.tif", grid_x, grid_y, rms_map)
 show_raster("rms_height_map.tif", "RMS Height per Patch")
