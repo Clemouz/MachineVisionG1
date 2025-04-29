@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # Load the LAS or LAZ file
-las = laspy.read("Points.laz")
+las = laspy.read("/mnt/e/Neu/Uni/12. Semester/Machine Vision Project/Data/Machine Vision Project Data 2025 (UAV and TLS)/2023_Krycklan_TLS/Trees/44.laz")
 
 # Extract point cloud data
 x = las.x
