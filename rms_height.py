@@ -36,7 +36,7 @@ def show_raster(filepath, title="Raster"):
 # get point cloud data
 x, y, z, classification, x_min, y_min, x_max, y_max = read_laz_bounds(las_file)
 ground_points = (classification == 2)
-points = np.column_stack((x, y, z))
+points = np.column_stack((x[ground_points], y[ground_points], z[ground_points]))
 
 # Build the KDTree
 tree = KDTree(points[:, :2])  # Only x, y if you are sliding in 2D
