@@ -10,11 +10,13 @@ from scipy.interpolate import griddata
 import rasterio
 from rasterio.transform import from_bounds
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoLocator
+from tqdm import tqdm
 
 # path leading to point cloud file
 las_file = "/mnt/e/Neu/Uni/12. Semester/Machine Vision Project/Data/Machine Vision Project Data 2025 (UAV and TLS)/240829_ALS_Matrice300_Svb/240829_ALS_Matrice300_Svb_Classified.las"
 # size of calculation window (resolution)
-window_size = 1
+window_size = 10
 
 # read the file
 def read_laz_bounds(filename):
@@ -31,11 +33,23 @@ def save_raster(filename, x, y, data):
 def show_raster(filepath, title="Raster"):
     with rasterio.open(filepath) as src:
         data = src.read(1)
-        plt.imshow(data, cmap='terrain')
+        bounds = src.bounds
+        extent = [bounds.left, bounds.right, bounds.bottom, bounds.top]
+
+        plt.figure(figsize=(8, 6))
+        plt.imshow(data, cmap='terrain', extent=extent, origin='upper')
         plt.colorbar(label='RMS Height (metres)')
         plt.title(title)
         plt.xlabel("X")
         plt.ylabel("Y")
+
+        # Add coordinate gridlines
+        ax = plt.gca()
+        ax.grid(True, which='both', color='gray', linestyle='--', linewidth=0.5)
+        ax.xaxis.set_major_locator(AutoLocator())
+        ax.yaxis.set_major_locator(AutoLocator())
+
+        plt.tight_layout()
         plt.show()
 
 # get point cloud data
@@ -54,8 +68,11 @@ n_rows = int(np.ceil((y_max - y_min) / window_size))
 # Output raster array
 raster = np.full((n_rows, n_cols), np.nan, dtype=np.float32)
 
+#debug: total number of points taken for calculation
+sum_window_points = 0
+
 # Loop over grid
-for row in range(n_rows):
+for row in tqdm(range(n_rows)):
     for col in range(n_cols):
         # Calculate window borders
         min_x = x_min + col * window_size
@@ -82,16 +99,20 @@ for row in range(n_rows):
             ]
         #print(f"number of points in exact window: {len(window_points)}")
 
+        sum_window_points += len(window_points)
+
         # calculate rms height for points within the exact window and add to raster
         #if len(window_points) == 1:
         #    rms_height = window_points[0][2]
         #    print(f"rms height: {rms_height}")
         #    raster[row, col] = 0
-        if len(window_points) > 1:
+        if len(window_points) > 0:
             z = window_points[:, 2]
             rms_height = np.sqrt(np.mean((z - z.mean()) ** 2))  # RMS height
             #print(f"rms height: {rms_height}")
             raster[row, col] = rms_height
+
+print(f"total number of window points: {sum_window_points}")
 
 # Prepare x, y for save function
 x = np.linspace(x_min, x_max, n_cols)
