@@ -16,7 +16,7 @@ from tqdm import tqdm
 # path leading to point cloud file
 las_file = "/mnt/e/Neu/Uni/12. Semester/Machine Vision Project/Data/Machine Vision Project Data 2025 (UAV and TLS)/240829_ALS_Matrice300_Svb/240829_ALS_Matrice300_Svb_Classified.las"
 # size of calculation window (resolution)
-window_size = 10
+window_size = 1
 
 # read the file
 def read_laz_bounds(filename):
@@ -29,14 +29,14 @@ def save_raster(filename, x, y, data):
     with rasterio.open(filename, "w", driver="GTiff", height=data.shape[0], width=data.shape[1], count=1, dtype=data.dtype, transform=transform) as dst:
         dst.write(data, 1)
 
-# Show the raster
+# Show the GeoTIFF file
 def show_raster(filepath, title="Raster"):
     with rasterio.open(filepath) as src:
         data = src.read(1)
         bounds = src.bounds
         extent = [bounds.left, bounds.right, bounds.bottom, bounds.top]
 
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(50, 50))
         plt.imshow(data, cmap='terrain', extent=extent, origin='upper')
         plt.colorbar(label='RMS Height (metres)')
         plt.title(title)
@@ -111,6 +111,8 @@ for row in tqdm(range(n_rows)):
             rms_height = np.sqrt(np.mean((z - z.mean()) ** 2))  # RMS height
             #print(f"rms height: {rms_height}")
             raster[row, col] = rms_height
+
+print(points[0])
 
 print(f"total number of window points: {sum_window_points}")
 
