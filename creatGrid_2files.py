@@ -117,6 +117,7 @@ def compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength=0.2
     ax.yaxis.set_major_locator(AutoLocator())
     plt.show()
 
+
 # === APPLICATION ===
 
 # Read both LAS files
