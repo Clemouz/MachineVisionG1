@@ -67,14 +67,12 @@ def show_raster(filepath, title="Raster"):
         ax.yaxis.set_major_locator(AutoLocator())
         plt.show()
 
-# --- Suggest radar wavelength needed to achieve a specific ks target ---
 def suggest_wavelength(rms_map, target_ks):
     # Given a target ks, compute the required radar wavelength per pixel
     # λ = 2π * s / ks_target
     wavelength_map = (2 * np.pi * rms_map) / target_ks
     return wavelength_map
 
-# --- Compute ks map and classify surface roughness regions ---
 def compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength=0.23):
     # Convert RMS height to ks using radar wavelength: ks = s * 2π / λ
     k = 2 * np.pi / radar_wavelength
@@ -118,7 +116,6 @@ def compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength=0.2
     ax.yaxis.set_major_locator(AutoLocator())
     plt.show()
 
-# --- Correlation Length Calculation ---
 def calculate_correlation_length(dtm_array, window_size):
     rows, cols = dtm_array.shape
     corr_map = np.full_like(dtm_array, np.nan, dtype=np.float32)
@@ -142,10 +139,9 @@ def calculate_correlation_length(dtm_array, window_size):
 
             acf = acf / center_val
             acf_mean += np.nanmean(acf)
-            # Create distance matrix from center
             y_idxs, x_idxs = np.indices(acf.shape)
             r = np.sqrt((x_idxs - center[1])**2 + (y_idxs - center[0])**2).astype(np.int32)
-            r = r.astype(np.int32) #Bin distances to integers
+            r = r.astype(np.int32)
             max_radius = r.max()
             radial_acf = np.zeros(max_radius + 1)
             counts = np.zeros(max_radius + 1)
@@ -157,7 +153,6 @@ def calculate_correlation_length(dtm_array, window_size):
                     radial_acf[rad] = np.mean(values)
                     counts[rad] = values.size
 
-            # Find correlation length (first drop below 1/e)
             threshold = 1 / math.e
             below = np.where(radial_acf < threshold)[0]
             if below.size > 0:
@@ -166,16 +161,25 @@ def calculate_correlation_length(dtm_array, window_size):
                 corr_length = max_radius
 
             corr_map[i:i+window_size, j:j+window_size] = corr_length
-    print(	"Mean ACF: ", acf_mean/(rows*cols))
+    print("Mean ACF: ", acf_mean/(rows*cols))
     return corr_map
+
+# === USER INPUT SECTION ===
+try:
+    radar_wavelength = float(input("Enter radar wavelength in meters (e.g. 0.23): "))
+    plot_choice = input("Enter 1 for RMS+ks, 2 for Correlation, 3 for All: ").strip()
+    if plot_choice not in ("1", "2", "3"):
+        raise ValueError("Invalid plot selection.")
+except ValueError as e:
+    print(f"Error: {e}")
+    exit(1)
+# === END USER INPUT SECTION ===
 
 # === APPLICATION ===
 
 # Read both LAS files
 x1, y1, z1, classification1, min_x1, min_y1, max_x1, max_y1 = read_laz_bounds(las_file_1)
 x2, y2, z2, classification2, min_x2, min_y2, max_x2, max_y2 = read_laz_bounds(las_file_2)
-
-# Find common area
 min_x = min(min_x1, min_x2)
 min_y = min(min_y1, min_y2)
 max_x = max(max_x1, max_x2)
@@ -202,15 +206,17 @@ combined_dtm = np.nanmean(np.array([dtm_z_1, dtm_z_2]), axis=0)
 # Save combined DTM to GeoTIFF
 save_raster("combined_dtm.tif", grid_x, grid_y, combined_dtm)
 
-# Calculate local surface roughness (RMS)
-rms_map = calculate_rms(combined_dtm, window_size)
-save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
-show_raster("rms_height_map_combined.tif", "RMS Height per Patch (Combined)")
+# Conditional logic for plot generation
+if plot_choice in ("1", "3"):
+    # Calculate local surface roughness (RMS)
+    rms_map = calculate_rms(combined_dtm, window_size)
+    save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
+    show_raster("rms_height_map_combined.tif", "RMS Height per Patch (Combined)")
+    
+    # Compute ks map and display classification
+    compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength)
 
-# Compute ks map and display classification
-compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength)
-
-# Calculate correlation length and display
-corr_map = calculate_correlation_length(combined_dtm, window_size)
-save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
-show_raster("correlation_length_map.tif", "Correlation Length per Patch")
+if plot_choice in ("2", "3"):
+    corr_map = calculate_correlation_length(combined_dtm, window_size)
+    save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
+    show_raster("correlation_length_map.tif", "Correlation Length per Patch")
