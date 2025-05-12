@@ -37,7 +37,7 @@ def interpolate_points(x, y, z, grid_x, grid_y):
 
 from scipy.spatial import cKDTree  # Faster than KDTree
 
-def idw_interpolate_points(x, y, z, grid_x, grid_y, power=2, max_neighbors=12):
+def idw_interpolate_points(x, y, z, grid_x, grid_y, power=1, max_neighbors=12):
     interpolated = np.full(grid_x.shape, np.nan)
     known_points = np.column_stack((x, y))
     grid_points = np.column_stack((grid_x.ravel(), grid_y.ravel()))
@@ -46,7 +46,7 @@ def idw_interpolate_points(x, y, z, grid_x, grid_y, power=2, max_neighbors=12):
     tree = cKDTree(known_points)
 
     # Query nearest neighbors
-    distances, idxs = tree.query(grid_points, k=max_neighbors)
+    distances, idxs = tree.query(grid_points, k=max_neighbors, workers = -1, distance_upper_bound=window_size)
 
     # Handle case when only one neighbor is returned
     if max_neighbors == 1:
@@ -59,6 +59,7 @@ def idw_interpolate_points(x, y, z, grid_x, grid_y, power=2, max_neighbors=12):
         weights[distances == 0] = 1e12  # Assign high weight to exact matches
 
     # Weighted average
+    z = np.append(z, np.nan)
     weighted_vals = weights * z[idxs]
     interpolated_vals = np.sum(weighted_vals, axis=1) / np.sum(weights, axis=1)
 
@@ -92,6 +93,7 @@ def show_raster(filepath, title="Raster"):
         plt.colorbar(label='Elevation (meters)')
         plt.title(title)
         plt.xlabel("X")
+        plt.gca().invert_yaxis()
         plt.ylabel("Y")
         ax = plt.gca()
         ax.grid(True, which='both', color='gray', linestyle='--', linewidth=0.5)
@@ -123,6 +125,7 @@ def compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength=0.2
     extent = [bounds[0], bounds[1], bounds[2], bounds[3]]
     plt.imshow(ks_class_map, cmap=cmap, interpolation='nearest', extent=extent, origin='upper')
     plt.colorbar(ticks=[0.5, 1.5, 2.5], label="Surface Type")
+    plt.gca().invert_yaxis()
     plt.clim(0, 3)
     plt.title("Surface Roughness Classification Based on k_s")
     plt.xlabel("X")
@@ -213,12 +216,6 @@ print("step 1")
 # Read both LAS files
 x1, y1, z1, classification1, min_x1, min_y1, max_x1, max_y1 = read_laz_bounds(las_file_1)
 x2, y2, z2, classification2, min_x2, min_y2, max_x2, max_y2 = read_laz_bounds(las_file_2)
-<<<<<<< HEAD
-
-print("step 2")
-# Find common area
-=======
->>>>>>> 63ac0dffadacaf661befb5d7dead28a21e1ac149
 min_x = min(min_x1, min_x2)
 min_y = min(min_y1, min_y2)
 max_x = max(max_x1, max_x2)
@@ -250,23 +247,6 @@ print("step 7")
 # Save combined DTM to GeoTIFF
 save_raster("combined_dtm.tif", grid_x, grid_y, combined_dtm)
 
-<<<<<<< HEAD
-print("step 8")
-# Calculate local surface roughness (RMS)
-rms_map = calculate_rms(combined_dtm, window_size)
-save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
-show_raster("rms_height_map_combined.tif", "RMS Height per Patch (Combined), IDW")
-
-print("step 9")
-# Compute ks map and display classification
-compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength)
-
-print("step 10")
-# Calculate correlation length and display
-corr_map = calculate_correlation_length(combined_dtm, window_size)
-save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
-show_raster("correlation_length_map.tif", "Correlation Length per Patch, IDW")
-=======
 # Conditional logic for plot generation
 if plot_choice in ("1", "3"):
     # Calculate local surface roughness (RMS)
@@ -281,4 +261,3 @@ if plot_choice in ("2", "3"):
     corr_map = calculate_correlation_length(combined_dtm, window_size)
     save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
     show_raster("correlation_length_map.tif", "Correlation Length per Patch")
->>>>>>> 63ac0dffadacaf661befb5d7dead28a21e1ac149
