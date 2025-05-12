@@ -8,11 +8,12 @@ from scipy.interpolate import griddata
 from matplotlib.ticker import AutoLocator
 from scipy.signal import correlate2d
 import math
+from scipy.spatial import ckdtree
 
 
 # === CONFIG ===
-las_file_1 = "RadarTower001_Classified.las"
-las_file_2 = "RadarTower002_Classified.las"
+las_file_1 = "data_classified.las"
+las_file_2 = "data_classified.las"
 resolution = 0.1  # grid resolution in meters
 radar_wavelength = 0.23  # L-band radar wavelength in meters
 window_size = 15  # RMS window size in pixels
@@ -33,6 +34,37 @@ def interpolate_points(x, y, z, grid_x, grid_y):
     points = np.column_stack((x, y))
     interpolated_z = griddata(points, z, grid_points, method='nearest')
     return interpolated_z.reshape(grid_x.shape)
+
+from scipy.spatial import cKDTree  # Faster than KDTree
+
+def idw_interpolate_points(x, y, z, grid_x, grid_y, power=2, max_neighbors=12):
+    interpolated = np.full(grid_x.shape, np.nan)
+    known_points = np.column_stack((x, y))
+    grid_points = np.column_stack((grid_x.ravel(), grid_y.ravel()))
+
+    # Build KDTree
+    tree = cKDTree(known_points)
+
+    # Query nearest neighbors
+    distances, idxs = tree.query(grid_points, k=max_neighbors)
+
+    # Handle case when only one neighbor is returned
+    if max_neighbors == 1:
+        distances = distances[:, np.newaxis]
+        idxs = idxs[:, np.newaxis]
+
+    # Compute weights
+    with np.errstate(divide='ignore'):
+        weights = 1.0 / np.power(distances, power)
+        weights[distances == 0] = 1e12  # Assign high weight to exact matches
+
+    # Weighted average
+    weighted_vals = weights * z[idxs]
+    interpolated_vals = np.sum(weighted_vals, axis=1) / np.sum(weights, axis=1)
+
+    return interpolated_vals.reshape(grid_x.shape)
+
+
 
 def calculate_rms(dtm_array, window_size):
     rows, cols = dtm_array.shape
@@ -171,27 +203,33 @@ def calculate_correlation_length(dtm_array, window_size):
 
 # === APPLICATION ===
 
+print("step 1")
 # Read both LAS files
 x1, y1, z1, classification1, min_x1, min_y1, max_x1, max_y1 = read_laz_bounds(las_file_1)
 x2, y2, z2, classification2, min_x2, min_y2, max_x2, max_y2 = read_laz_bounds(las_file_2)
 
+print("step 2")
 # Find common area
 min_x = min(min_x1, min_x2)
 min_y = min(min_y1, min_y2)
 max_x = max(max_x1, max_x2)
 max_y = max(max_y1, max_y2)
 
+print("step 3")
 # Create common grid for both point clouds
 grid_x, grid_y = create_grid(min_x, min_y, max_x, max_y, resolution)
 
+print("step 4")
 # Filter only ground-classified points
 ground1 = (classification1 == 2)
 ground2 = (classification2 == 2)
 
+print("step 5")
 # Interpolate both scans onto the same grid
-dtm_z_1 = interpolate_points(x1[ground1], y1[ground1], z1[ground1], grid_x, grid_y)
-dtm_z_2 = interpolate_points(x2[ground2], y2[ground2], z2[ground2], grid_x, grid_y)
+dtm_z_1 = idw_interpolate_points(x1[ground1], y1[ground1], z1[ground1], grid_x, grid_y)
+dtm_z_2 = idw_interpolate_points(x2[ground2], y2[ground2], z2[ground2], grid_x, grid_y)
 
+print("step 6")
 # --- Combine the DTMs ---
 # Rule:
 # - If both have values → average them
@@ -199,18 +237,22 @@ dtm_z_2 = interpolate_points(x2[ground2], y2[ground2], z2[ground2], grid_x, grid
 # - If none → leave as NaN
 combined_dtm = np.nanmean(np.array([dtm_z_1, dtm_z_2]), axis=0)
 
+print("step 7")
 # Save combined DTM to GeoTIFF
 save_raster("combined_dtm.tif", grid_x, grid_y, combined_dtm)
 
+print("step 8")
 # Calculate local surface roughness (RMS)
 rms_map = calculate_rms(combined_dtm, window_size)
 save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
-show_raster("rms_height_map_combined.tif", "RMS Height per Patch (Combined)")
+show_raster("rms_height_map_combined.tif", "RMS Height per Patch (Combined), IDW")
 
+print("step 9")
 # Compute ks map and display classification
 compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength)
 
+print("step 10")
 # Calculate correlation length and display
 corr_map = calculate_correlation_length(combined_dtm, window_size)
 save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
-show_raster("correlation_length_map.tif", "Correlation Length per Patch")
+show_raster("correlation_length_map.tif", "Correlation Length per Patch, IDW")
