@@ -8,11 +8,13 @@ from scipy.interpolate import griddata
 from matplotlib.ticker import AutoLocator
 from scipy.signal import correlate2d
 import math
+from scipy.spatial import ckdtree
+from scipy.spatial import cKDTree  # Faster than KDTree
 
 
 # === CONFIG ===
-las_file_1 = "RadarTower001_Classified.las"
-las_file_2 = "RadarTower002_Classified.las"
+las_file_1 = "RadarTower002_Classified.las"
+las_file_2 = "RadarTower001_Classified.las"
 resolution = 0.1  # grid resolution in meters
 radar_wavelength = 0.23  # L-band radar wavelength in meters
 window_size = 15  # RMS window size in pixels
@@ -28,11 +30,37 @@ def create_grid(min_x, min_y, max_x, max_y, resolution=0.1):
     y = np.arange(min_y, max_y, resolution)
     return np.meshgrid(x, y)
 
-def interpolate_points(x, y, z, grid_x, grid_y):
+
+def idw_interpolate_points(x, y, z, grid_x, grid_y, power=1, max_neighbors=12):
+    interpolated = np.full(grid_x.shape, np.nan)
+    known_points = np.column_stack((x, y))
     grid_points = np.column_stack((grid_x.ravel(), grid_y.ravel()))
-    points = np.column_stack((x, y))
-    interpolated_z = griddata(points, z, grid_points, method='nearest')
-    return interpolated_z.reshape(grid_x.shape)
+    print("I Am here!")
+
+    # Build KDTree
+    tree = cKDTree(known_points)
+
+    # Query nearest neighbors
+    distances, idxs = tree.query(grid_points, k=max_neighbors, workers = -1, distance_upper_bound=window_size)
+
+    # Handle case when only one neighbor is returned
+    if max_neighbors == 1:
+        distances = distances[:, np.newaxis]
+        idxs = idxs[:, np.newaxis]
+
+    # Compute weights
+    with np.errstate(divide='ignore'):
+        weights = 1.0 / np.power(distances, power)
+        weights[distances == 0] = 1e12  # Assign high weight to exact matches
+
+    # Weighted average
+    z = np.append(z, np.nan)
+    weighted_vals = weights * z[idxs]
+    interpolated_vals = np.sum(weighted_vals, axis=1) / np.sum(weights, axis=1)
+
+    return interpolated_vals.reshape(grid_x.shape)
+
+
 
 def calculate_rms(dtm_array, window_size):
     rows, cols = dtm_array.shape
@@ -51,20 +79,26 @@ def save_raster(filename, x, y, data):
     with rasterio.open(filename, "w", driver="GTiff", height=data.shape[0], width=data.shape[1], count=1, dtype=data.dtype, transform=transform) as dst:
         dst.write(data, 1)
 
-def show_raster(filepath, title="Raster"):
+def show_raster(filepath, title="Raster", vmin=None, vmax=None, plot_colorbar="value", info_text=None):
     with rasterio.open(filepath) as src:
         data = src.read(1)
         bounds = src.bounds
         extent = [bounds.left, bounds.right, bounds.bottom, bounds.top]
-        plt.imshow(data, cmap='terrain', extent=extent, origin='upper')
-        plt.colorbar(label='Elevation (meters)')
+        plt.imshow(data, cmap='terrain', extent=extent, origin='lower', vmin=vmin, vmax=vmax)
+        plt.colorbar(label=plot_colorbar)
         plt.title(title)
         plt.xlabel("X")
+
         plt.ylabel("Y")
         ax = plt.gca()
         ax.grid(True, which='both', color='gray', linestyle='--', linewidth=0.5)
         ax.xaxis.set_major_locator(AutoLocator())
         ax.yaxis.set_major_locator(AutoLocator())
+
+        if info_text:
+            plt.gcf().text(0.02, 0.5, info_text, fontsize=9, bbox=dict(facecolor='white', alpha=0.7))
+
+
         plt.show()
 
 def suggest_wavelength(rms_map, target_ks):
@@ -89,7 +123,7 @@ def compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength=0.2
     plt.figure(figsize=(12, 10))
     bounds = [grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()]
     extent = [bounds[0], bounds[1], bounds[2], bounds[3]]
-    plt.imshow(ks_class_map, cmap=cmap, interpolation='nearest', extent=extent, origin='upper')
+    plt.imshow(ks_class_map, cmap=cmap, interpolation='nearest', extent=extent, origin='lower')
     plt.colorbar(ticks=[0.5, 1.5, 2.5], label="Surface Type")
     plt.clim(0, 3)
     plt.title("Surface Roughness Classification Based on k_s")
@@ -180,6 +214,7 @@ except ValueError as e:
 # Read both LAS files
 x1, y1, z1, classification1, min_x1, min_y1, max_x1, max_y1 = read_laz_bounds(las_file_1)
 x2, y2, z2, classification2, min_x2, min_y2, max_x2, max_y2 = read_laz_bounds(las_file_2)
+
 min_x = min(min_x1, min_x2)
 min_y = min(min_y1, min_y2)
 max_x = max(max_x1, max_x2)
@@ -193,8 +228,8 @@ ground1 = (classification1 == 2)
 ground2 = (classification2 == 2)
 
 # Interpolate both scans onto the same grid
-dtm_z_1 = interpolate_points(x1[ground1], y1[ground1], z1[ground1], grid_x, grid_y)
-dtm_z_2 = interpolate_points(x2[ground2], y2[ground2], z2[ground2], grid_x, grid_y)
+dtm_z_1 = idw_interpolate_points(x1[ground1], y1[ground1], z1[ground1], grid_x, grid_y)
+dtm_z_2 = idw_interpolate_points(x2[ground2], y2[ground2], z2[ground2], grid_x, grid_y)
 
 # --- Combine the DTMs ---
 # Rule:
@@ -206,12 +241,22 @@ combined_dtm = np.nanmean(np.array([dtm_z_1, dtm_z_2]), axis=0)
 # Save combined DTM to GeoTIFF
 save_raster("combined_dtm.tif", grid_x, grid_y, combined_dtm)
 
+
+# The information box the will be showen next to the plot
+info_str = f"""File 1: {las_file_1}
+File 2: {las_file_2}
+Resolution: {resolution} m
+Wavelength: {radar_wavelength} m
+Window size: {window_size} px"""
+
+
 # Conditional logic for plot generation
 if plot_choice in ("1", "3"):
     # Calculate local surface roughness (RMS)
     rms_map = calculate_rms(combined_dtm, window_size)
     save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
-    show_raster("rms_height_map_combined.tif", "RMS Height per Patch (Combined)")
+    show_raster("rms_height_map_combined.tif", title="RMS Height per Patch (Combined)", vmin=0, vmax=2,plot_colorbar="RMS higths in meters", info_text=info_str)
+
     
     # Compute ks map and display classification
     compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength)
@@ -219,4 +264,5 @@ if plot_choice in ("1", "3"):
 if plot_choice in ("2", "3"):
     corr_map = calculate_correlation_length(combined_dtm, window_size)
     save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
-    show_raster("correlation_length_map.tif", "Correlation Length per Patch")
+    show_raster("correlation_length_map.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str)
+
