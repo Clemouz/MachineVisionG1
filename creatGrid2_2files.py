@@ -18,6 +18,7 @@ las_file_2 = "RadarTower001_Classified.las"
 resolution = 0.1  # grid resolution in meters
 radar_wavelength = 0.23  # L-band radar wavelength in meters
 window_size = 15  # RMS window size in pixels
+max_neighbors = 12 #the number of neighbors used for idw_interpolate_points
 
 # === FUNCTIONS ===
 
@@ -35,7 +36,7 @@ def idw_interpolate_points(x, y, z, grid_x, grid_y, power=1, max_neighbors=12):
     interpolated = np.full(grid_x.shape, np.nan)
     known_points = np.column_stack((x, y))
     grid_points = np.column_stack((grid_x.ravel(), grid_y.ravel()))
-    print("I Am here!")
+
 
     # Build KDTree
     tree = cKDTree(known_points)
@@ -202,11 +203,21 @@ def calculate_correlation_length(dtm_array, window_size):
 try:
     radar_wavelength = float(input("Enter radar wavelength in meters (e.g. 0.23): "))
     plot_choice = input("Enter 1 for RMS+ks, 2 for Correlation, 3 for All: ").strip()
+
     if plot_choice not in ("1", "2", "3"):
         raise ValueError("Invalid plot selection.")
+
+    if plot_choice in ("1", "3"):
+        max_neighbors_input = int(input("Enter max_neighbors for the IDW interpolation (minimum 1): "))
+        if max_neighbors_input < 1:
+            raise ValueError("max_neighbors must be at least 1.")
+        else:
+            max_neighbors = max_neighbors_input
+
 except ValueError as e:
     print(f"Error: {e}")
     exit(1)
+
 # === END USER INPUT SECTION ===
 
 # === APPLICATION ===
@@ -242,12 +253,21 @@ combined_dtm = np.nanmean(np.array([dtm_z_1, dtm_z_2]), axis=0)
 save_raster("combined_dtm.tif", grid_x, grid_y, combined_dtm)
 
 
-# The information box the will be showen next to the plot
-info_str = f"""File 1: {las_file_1}
+# Info string for RMS-related plots (includes max_neighbors)
+info_str_rms = f"""File 1: {las_file_1}
+File 2: {las_file_2}
+Resolution: {resolution} m
+Wavelength: {radar_wavelength} m
+max_neighbors: {max_neighbors} 
+Window size: {window_size} px"""
+
+# Info string for correlation plot (excludes max_neighbors)
+info_str_corr = f"""File 1: {las_file_1}
 File 2: {las_file_2}
 Resolution: {resolution} m
 Wavelength: {radar_wavelength} m
 Window size: {window_size} px"""
+
 
 
 # Conditional logic for plot generation
@@ -255,7 +275,7 @@ if plot_choice in ("1", "3"):
     # Calculate local surface roughness (RMS)
     rms_map = calculate_rms(combined_dtm, window_size)
     save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
-    show_raster("rms_height_map_combined.tif", title="RMS Height per Patch (Combined)", vmin=0, vmax=2,plot_colorbar="RMS higths in meters", info_text=info_str)
+    show_raster("rms_height_map_combined.tif", title="RMS Height per Patch (Combined)", vmin=0, vmax=2,plot_colorbar="RMS higths in meters", info_text=info_str_rms)
 
     
     # Compute ks map and display classification
@@ -264,5 +284,5 @@ if plot_choice in ("1", "3"):
 if plot_choice in ("2", "3"):
     corr_map = calculate_correlation_length(combined_dtm, window_size)
     save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
-    show_raster("correlation_length_map.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str)
+    show_raster("correlation_length_map.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str_corr)
 
