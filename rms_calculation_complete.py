@@ -21,9 +21,9 @@ from scipy.spatial import cKDTree  # Faster than KDTree
 
 ### CONFIG ###
 #las_file = "/mnt/e/Neu/Uni/12. Semester/Machine Vision Project/Data/Machine Vision Project Data 2025 (UAV and TLS)/240829_ALS_Matrice300_Svb/240829_ALS_Matrice300_Svb_Classified.las"
-las_file = "flat_ground_surface.las"
+las_file = "varying_point_density_slope_surface.las"
 window_size = 3  # specifies the size of a window in meters (one window is one pixel in the raster and in the final map)
-resolution = 0.1  # specifies the size of one grid cell (the point cloud height gets interpolated at the grid junctions)
+resolution = 1  # specifies the size of one grid cell (the point cloud height gets interpolated at the grid junctions)
 n = 4  # number of nearest points (neighbours) taken into account for circle calculation
 
 ### FUNCTIONS ###
@@ -58,7 +58,7 @@ def show_raster(filepath, title="Raster", vmin=None, vmax=None, plot_colorbar="v
         bounds = src.bounds
         extent = [bounds.left, bounds.right, bounds.bottom, bounds.top]
         plt.figure(figsize=(10, 10))
-        plt.imshow(data, cmap='terrain', extent=extent, origin='lower', vmin=vmin, vmax=vmax)
+        plt.imshow(data, cmap='viridis', extent=extent, origin='lower', vmin=vmin, vmax=vmax)
         plt.colorbar(label=plot_colorbar)
         plt.title(title)
         plt.xlabel("X")
@@ -102,7 +102,7 @@ def idw_interpolate_points(x, y, z, grid_x, grid_y, power=1, max_neighbors=12):
     tree = cKDTree(known_points)
 
     # Query nearest neighbors
-    distances, idxs = tree.query(grid_points, k=max_neighbors, workers = -1, distance_upper_bound=window_size)
+    distances, idxs = tree.query(grid_points, k=max_neighbors, workers = -1, distance_upper_bound=4*window_size)
 
     # Handle case when only one neighbor is returned
     if max_neighbors == 1:
@@ -161,7 +161,7 @@ def interploation_approach():
 
     # save and plot the result
     save_raster("rms_height_map.tif", grid_x, grid_y, rms_map)
-    info_text = "Resolution: " + str(resolution) + "\nWindow size: " + str(window_size) + "\nInterpolation method: idw"
+    info_text = "Resolution: " + str(resolution) + "\nWindow size: " + str(window_size) + "\nInterpolation method: idw (increased upper bound)"
     show_raster("rms_height_map.tif", "RMS Height", info_text=info_text)
 
 
@@ -306,7 +306,7 @@ def circle_approach():
     points = np.column_stack((x[ground_points], y[ground_points], z[ground_points]))
 
     #debug: only use every e.g. 128-th point for testing:
-    points = points[::128]
+    points = points[::1]
 
     # Build the KDTree
     tree = KDTree(points[:, :2])

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # Load the LAS or LAZ file
-las = laspy.read("ground_surface.las")
+las = laspy.read("slope_surface.las")
 
 # Extract point cloud data
 x = las.x

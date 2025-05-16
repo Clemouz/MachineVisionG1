@@ -1,31 +1,54 @@
 import numpy as np
 import laspy
 
-# Create a grid of points representing a flat surface
-x = np.linspace(0, 500, 500)
-y = np.linspace(0, 500, 500)
+# Grid points
+x = np.arange(0, 100, 1)
+y = np.arange(0, 100, 1)
 xv, yv = np.meshgrid(x, y)
-zv = np.exp(-((xv-250)**2 + (yv-250)**2)/500)
-zv = zv + np.exp(-((xv-150)**2 + (yv-350)**2)/500)
-
-# Flatten the grid to get XYZ coordinates
 x_vals = xv.ravel()
 y_vals = yv.ravel()
-z_vals = zv.ravel()
+slope_factor = 0.02
 
-# Set the fraction of points to keep (e.g., 70% density)
-keep_fraction = 0.03
+# Define bumps and dips: (center_x, center_y, amplitude, sigma)
+features = [
+    (30, 30, +5, 10),   # Bump
+    (70, 30, -4, 8),    # Dip
+    (50, 70, +3, 12),   # Bump
+    (80, 80, -2.5, 10), # Dip
+    (20, 80, +4, 8)     # Bump
+]
 
-# Number of total points
-num_points = x_vals.shape[0]
+# Compute elevation as sum of bumps/dips
+z_vals = (x_vals + y_vals) * slope_factor
+for cx, cy, amp, sigma in features:
+    dist_sq = (x_vals - cx)**2 + (y_vals - cy)**2
+    z_vals += amp * np.exp(-dist_sq / (2 * sigma**2))
+z_vals = (x_vals + y_vals) * slope_factor
 
-# Generate random mask of indices to keep
-keep_indices = np.random.choice(num_points, size=int(keep_fraction * num_points), replace=False)
+# Density centers
+centers = [(30, 30), (50, 30), (70, 70)]
+radius = 25  # max distance at which density still has influence
+falloff_exponent = 3.0  # controls curve sharpness
+min_prob = 1
+max_prob = 1
 
-# Filter points by selected indices
-x_vals = x_vals[keep_indices]
-y_vals = y_vals[keep_indices]
-z_vals = z_vals[keep_indices]
+# Initialize probability map
+prob = np.zeros_like(x_vals, dtype=np.float32)
+
+# Apply flattened falloff from each center
+for cx, cy in centers:
+    dist = np.sqrt((x_vals - cx)**2 + (y_vals - cy)**2)
+    local_prob = 1 - (dist / radius)**falloff_exponent
+    local_prob = np.clip(local_prob, 0, 1)
+    prob += local_prob
+
+# Normalize, then apply thresholds
+prob = prob / prob.max()
+prob = np.clip(prob, min_prob, max_prob)
+
+# Random sampling using the probability map
+mask = np.random.rand(x_vals.shape[0]) < prob
+x_vals, y_vals, z_vals = x_vals[mask], y_vals[mask], z_vals[mask]
 
 # Create LAS file header
 header = laspy.LasHeader(point_format=3, version="1.2")
@@ -40,4 +63,4 @@ las.z = z_vals
 las.classification = np.full_like(x_vals, 2, dtype=np.uint8)
 
 # Save to .las file
-las.write("ground_surface.las")
+las.write("slope_surface.las")
