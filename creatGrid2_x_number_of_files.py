@@ -288,7 +288,7 @@ def calc_corr_length_and_rms(dtm_array, window_size):
 
             corr_map[i:i+window_size, j:j+window_size] = corr_length
     print("Mean ACF: ", acf_mean/(rows*cols))
-    corr_map, rms_map
+    return corr_map, rms_map
 
 
 # === USER INPUT SECTION ===
@@ -408,7 +408,7 @@ if plot_choice == "2":
 
 if plot_choice == "3":
     corr_map, rms_map = calc_corr_length_and_rms(combined_dtm, window_size_p)
-    save_raster("correlation_length_map_combined.tif", grid_x, grid_y, corr_map)
+    save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
     save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
-    show_raster("correlation_length_map_combined.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str_corr)
+    show_raster("correlation_length_map.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str_corr)
     show_raster("rms_height_map_combined.tif", title="RMS Height per Patch (Combined)", vmin=0, vmax=2,plot_colorbar="RMS higths in meters", info_text=info_str_rms)
