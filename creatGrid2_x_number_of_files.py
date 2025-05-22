@@ -240,6 +240,57 @@ def calculate_correlation_length(dtm_array, window_size_p):
     print("Mean ACF: ", acf_mean/(rows*cols))
     return corr_map
 
+def calc_corr_length_and_rms(dtm_array, window_size):
+    rows, cols = dtm_array.shape
+    corr_map = np.full_like(dtm_array, np.nan, dtype=np.float32)
+    rms_map = np.full_like(dtm_array, np.nan, dtype=np.float32)
+    acf_mean = 0
+    for i in range(0, rows, window_size):
+        for j in range(0, cols, window_size):
+            window = dtm_array[i:i+window_size, j:j+window_size]
+            rms = np.std(window)
+            rms_map[i:i+window_size, j:j+window_size] = rms
+            if np.isnan(window).all():
+                continue
+
+            window = window - np.nanmean(window)
+            window = np.nan_to_num(window)
+
+            acf = correlate2d(window, window, mode='full', boundary='symm')
+            center = (acf.shape[0] // 2, acf.shape[1] // 2)
+            center_val = acf[center]
+
+            if center_val == 0 or np.isnan(center_val):
+                continue
+
+            acf = acf / center_val
+            acf_mean += np.nanmean(acf)
+            y_idxs, x_idxs = np.indices(acf.shape)
+            r = np.sqrt((x_idxs - center[1])**2 + (y_idxs - center[0])**2).astype(np.int32)
+            r = r.astype(np.int32)
+            max_radius = r.max()
+            radial_acf = np.zeros(max_radius + 1)
+            counts = np.zeros(max_radius + 1)
+
+            for rad in range(max_radius + 1):
+                mask = r == rad
+                values = acf[mask]
+                if values.size > 0:
+                    radial_acf[rad] = np.mean(values)
+                    counts[rad] = values.size
+
+            threshold = 1 / math.e
+            below = np.where(radial_acf < threshold)[0]
+            if below.size > 0:
+                corr_length = below[0]
+            else:
+                corr_length = max_radius
+
+            corr_map[i:i+window_size, j:j+window_size] = corr_length
+    print("Mean ACF: ", acf_mean/(rows*cols))
+    corr_map, rms_map
+
+
 # === USER INPUT SECTION ===
 try:
     input_str = input("Enter one or more LAS file paths, separated by commas:\n").strip()
@@ -340,7 +391,7 @@ Window size: {window_size_m} m"""
 
 
 # Conditional logic for plot generation
-if plot_choice in ("1", "3"):
+if plot_choice == "1":
     # Calculate local surface roughness (RMS)
     rms_map = calculate_rms(combined_dtm, window_size_p)
     save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
@@ -350,8 +401,14 @@ if plot_choice in ("1", "3"):
     # Compute ks map and display classification
     compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength)
 
-if plot_choice in ("2", "3"):
+if plot_choice == "2":
     corr_map = calculate_correlation_length(combined_dtm, window_size_p)
     save_raster("correlation_length_map.tif", grid_x, grid_y, corr_map)
     show_raster("correlation_length_map.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str_corr)
 
+if plot_choice == "3":
+    corr_map, rms_map = calc_corr_length_and_rms(combined_dtm, window_size_p)
+    save_raster("correlation_length_map_combined.tif", grid_x, grid_y, corr_map)
+    save_raster("rms_height_map_combined.tif", grid_x, grid_y, rms_map)
+    show_raster("correlation_length_map_combined.tif", title="Correlation Length per Patch", vmin=0, vmax=12,plot_colorbar=" correlation length in meters", info_text=info_str_corr)
+    show_raster("rms_height_map_combined.tif", title="RMS Height per Patch (Combined)", vmin=0, vmax=2,plot_colorbar="RMS higths in meters", info_text=info_str_rms)
