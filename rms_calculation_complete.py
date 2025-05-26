@@ -161,7 +161,7 @@ def interploation_approach():
 
     # save and plot the result
     save_raster("rms_height_map.tif", grid_x, grid_y, rms_map)
-    info_text = "Resolution: " + str(resolution) + "\nWindow size: " + str(window_size) + "\nInterpolation method: idw (increased upper bound)"
+    info_text = "Resolution: " + str(resolution) + "\nWindow size: " + str(window_size) + "\nInterpolation method: idw (increased upper bound)" + "\nFile name: " + las_file
     show_raster("rms_height_map.tif", "RMS Height", info_text=info_text)
 
 
@@ -238,7 +238,8 @@ def real_measurements_approach():
     # Save to GeoTIFF
     save_raster("rms_height_map.tif", x, y, raster)
     # Show the plot
-    show_raster("rms_height_map.tif", "RMS Height per Patch")
+    info_text = "\nWindow size: " + str(window_size) + "\nNo Interpolation" + "\nFile name: " + las_file
+    show_raster("rms_height_map.tif", "RMS Height per Patch", info_text=info_text)
 
 def save_points(filename, data):
     # Create DataFrame
