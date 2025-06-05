@@ -31,7 +31,7 @@ This project was developed as part of the **5DV190: Project Course in Machine Vi
 #### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/MachineVisionG1.git
+git clone https://github.com/Clemouz/MachineVisionG1.git
 cd MachineVisionG1
 ```
 
