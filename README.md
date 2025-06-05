@@ -32,7 +32,6 @@ This project was developed as part of the **5DV190: Project Course in Machine Vi
 
 ```bash
 git clone https://github.com/Clemouz/MachineVisionG1.git
-cd MachineVisionG1
 ```
 
 #### 2. Install Dependencies
