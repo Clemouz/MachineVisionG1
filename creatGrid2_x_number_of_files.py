@@ -73,7 +73,6 @@ def read_laz_bounds(filename):
 #   spatial resolution. Used for rasterizing interpolated values.
 # Input:
 #   - min_x, min_y: Minimum coordinates of the area (floats)
-#   - max_x, max_y: Maximum coordinates of the area (floats)
 #   - resolution: Grid cell size in meters (default: 0.1)
 # Output:
 #   - grid_x, grid_y: 2D meshgrids of x and y coordinates
@@ -84,10 +83,10 @@ def create_grid(min_x, min_y, max_x, max_y, resolution=0.1):
 
 # Description:
 #   Performs Inverse Distance Weighting (IDW) interpolation on scattered
-#   point cloud data (x, y, z) to estimate z-values at regular grid points.
-#   For each grid cell, the function finds the nearest neighbors in the input
-#   point cloud and computes a weighted average of their z-values based on 
-#   inverse distance. 
+#   LiDAR ground points to estimate elevation (z-values) on a regular grid.
+#   For each target grid cell (x, y), the function finds the nearest known 
+#   points using a KDTree and computes a weighted average of their z-values 
+#   based on inverse distance to the target point.
 # Inputs:
 #   - x, y, z          : 1D arrays of known ground point coordinates and elevations
 #   - grid_x, grid_y   : 2D arrays (meshgrids) of target x/y coordinates for interpolation
@@ -128,7 +127,7 @@ def idw_interpolate_points(x, y, z, grid_x, grid_y, power=1, max_neighbors=12):
 # Description:
 #   Computes the RMS (root mean square) height of the terrain surface using
 #   a sliding window approach. For each square patch of the input DTM array,
-#   it calculates the standard deviation (which equals the RMS for zero-mean data),
+#   it calculates the standard deviation
 #   and fills a new raster (rms_map) with the same value across that patch.
 #   This results in a blocky map where each window shares a uniform RMS value.
 # Inputs:
@@ -288,7 +287,7 @@ def compute_and_show_ks_classified(rms_map, grid_x, grid_y, radar_wavelength=0.2
 #                      correlation length locally
 # Output:
 #   - corr_map       : 2D NumPy array of same shape as dtm_array, containing 
-#                      estimated correlation length for each window
+#                      calculated correlation length for each window
 def calculate_correlation_length(dtm_array, window_size_p):
     rows, cols = dtm_array.shape
     corr_map = np.full_like(dtm_array, np.nan, dtype=np.float32)
